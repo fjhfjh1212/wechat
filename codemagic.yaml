@@ -10,6 +10,15 @@ workflows:
         script: |
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 9.0/IPHONEOS_DEPLOYMENT_TARGET = 12.0/g' WeChat/WeChat.xcodeproj/project.pbxproj
           grep -m2 IPHONEOS_DEPLOYMENT_TARGET WeChat/WeChat.xcodeproj/project.pbxproj
+      - name: Remove duplicate bundle resources (build fix)
+        script: |
+          # The 2020 project lists two identical icons_filled_chats.svg files and two
+          # empty .gitkeep files in Copy Bundle Resources; Xcode 26 errors on the
+          # duplicate outputs. The two SVGs are byte-identical and the .gitkeep files
+          # are empty, so dropping the extra references changes nothing in the app.
+          sed -i '' -e '/84AC07702482609F008D32F6/d' -e '/DE66C0E2246AE2A3000E9915/d' -e '/DE66C0EB246AE2A3000E9915/d' WeChat/WeChat.xcodeproj/project.pbxproj
+          grep -c 'icons_filled_chats.svg in Resources' WeChat/WeChat.xcodeproj/project.pbxproj
+          grep -c '\.gitkeep in Resources' WeChat/WeChat.xcodeproj/project.pbxproj || true
       - name: Install CocoaPods dependencies
         script: |
           cd WeChat && pod install --repo-update
