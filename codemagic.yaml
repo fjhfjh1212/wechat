@@ -1,0 +1,33 @@
+workflows:
+  ios-native-unsigned:
+    name: iOS (unsigned)
+    max_build_duration: 60
+    environment:
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Bump deployment target to iOS 12
+        script: |
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 9.0/IPHONEOS_DEPLOYMENT_TARGET = 12.0/g' WeChat/WeChat.xcodeproj/project.pbxproj
+          grep -m2 IPHONEOS_DEPLOYMENT_TARGET WeChat/WeChat.xcodeproj/project.pbxproj
+      - name: Install CocoaPods dependencies
+        script: |
+          cd WeChat && pod install --repo-update
+      - name: Build iOS without code signing
+        script: |
+          xcodebuild -workspace WeChat/WeChat.xcworkspace \
+            -scheme WeChat \
+            -sdk iphoneos \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            archive -archivePath $CM_BUILD_DIR/WeChat.xcarchive
+      - name: Package unsigned IPA
+        script: |
+          mkdir -p $CM_BUILD_DIR/Payload
+          cp -r $CM_BUILD_DIR/WeChat.xcarchive/Products/Applications/WeChat.app $CM_BUILD_DIR/Payload/
+          cd $CM_BUILD_DIR && zip -r WeChat-unsigned.ipa Payload
+    artifacts:
+      - WeChat-unsigned.ipa
