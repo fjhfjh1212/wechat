@@ -1,0 +1,75 @@
+name: Build unsigned IPA
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/build-ipa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: |
+          ls -d /Applications/Xcode_*.app || true
+          xcodebuild -version
+
+      - name: Install CocoaPods
+        run: |
+          if ! command -v pod >/dev/null 2>&1; then sudo gem install cocoapods -n /usr/local/bin; fi
+          pod --version
+
+      - name: Bump deployment target to iOS 12
+        run: |
+          cd WeChat
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 9.0/IPHONEOS_DEPLOYMENT_TARGET = 12.0/g' WeChat.xcodeproj/project.pbxproj
+          grep -m2 IPHONEOS_DEPLOYMENT_TARGET WeChat.xcodeproj/project.pbxproj
+
+      - name: Pod install
+        run: |
+          cd WeChat
+          pod install --repo-update
+
+      - name: Build unsigned archive
+        run: |
+          cd WeChat
+          xcodebuild -workspace WeChat.xcworkspace \
+            -scheme WeChat \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            archive -archivePath "$PWD/build/WeChat.xcarchive"
+
+      - name: Package IPA
+        run: |
+          cd WeChat
+          mkdir -p Payload
+          cp -r build/WeChat.xcarchive/Products/Applications/WeChat.app Payload/
+          zip -r WeChat-unsigned.ipa Payload
+          ls -lh WeChat-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: WeChat-unsigned-ipa
+          path: WeChat/WeChat-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Publish IPA as release asset
+        if: success()
+        continue-on-error: true
+        run: |
+          gh release create "build-${{ github.run_number }}" \
+            --title "Unsigned IPA build #${{ github.run_number }}" \
+            --notes "Unsigned IPA built from CoderMikeHe/WeChat master. Install with 全能签 (sign with your own Apple ID)." \
+            WeChat/WeChat-unsigned.ipa
